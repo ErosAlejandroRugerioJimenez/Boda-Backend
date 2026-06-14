@@ -1,22 +1,20 @@
 package com.inventario.bodaapp.controller;
+
+import com.inventario.bodaapp.service.S3Service; // Importar tu nuevo servicio
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/upload")
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin(origins = "*") // Cambiado para que funcione en producción (AWS)
 public class UploadController {
 
-    // La carpeta donde se guardarán las fotos (se creará en la raíz de tu proyecto)
-    private static final String UPLOAD_DIR = "uploads/";
+    @Autowired
+    private S3Service s3Service; // Inyectamos el poder de Amazon S3
 
     @PostMapping
     public ResponseEntity<?> subirImagen(@RequestParam("foto") MultipartFile archivo) {
@@ -25,27 +23,14 @@ public class UploadController {
         }
 
         try {
-            // 1. Crear la carpeta si no existe
-            File directorio = new File(UPLOAD_DIR);
-            if (!directorio.exists()) {
-                directorio.mkdirs();
-            }
+            // Mandamos la foto directamente a la cubeta de Amazon S3
+            String urlImagenS3 = s3Service.uploadFile(archivo);
 
-            // 2. Generar un nombre único para la foto
-            String nombreOriginal = archivo.getOriginalFilename();
-            String extension = nombreOriginal.substring(nombreOriginal.lastIndexOf("."));
-            String nombreNuevo = UUID.randomUUID().toString() + extension;
-
-            // 3. Guardar el archivo en el disco duro
-            Path rutaDestino = Paths.get(UPLOAD_DIR + nombreNuevo);
-            Files.copy(archivo.getInputStream(), rutaDestino);
-
-            // 4. Devolverle a Angular la ruta pública de la imagen
-            String urlImagen = "/uploads/" + nombreNuevo;
-            return ResponseEntity.ok(Map.of("url", urlImagen));
+            // Le devolvemos a Angular la URL pública de Amazon
+            return ResponseEntity.ok(Map.of("url", urlImagenS3));
 
         } catch (IOException e) {
-            return ResponseEntity.internalServerError().body("Error al guardar la imagen");
+            return ResponseEntity.internalServerError().body("Error al guardar la imagen en S3");
         }
     }
 }
